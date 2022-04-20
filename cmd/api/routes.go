@@ -1,12 +1,24 @@
 package main
 
-import "github.com/julienschmidt/httprouter"
+import (
+	"github.com/julienschmidt/httprouter"
+	"net/http"
+)
 
 // encapsulate all routing rules
 func (app *application) routes() *httprouter.Router {
 
-	//initialize an httprouter instance \
+	//initialize a httprouter instance
 	router := httprouter.New()
+
+	//convert the notFoundResponse() helper to a http.handler
+	//using the http.HandlerFunc() adapter, and then set as the custom error
+	// handler for 404 Not Found Responses.
+	router.NotFound = http.HandlerFunc(app.notFoundResponse)
+
+	//convert the methodNotAllowedResponse() helper to a http.Handler and set
+	//it as the custom error handler for 405 method not allowed responses.
+	router.MethodNotAllowed = http.HandlerFunc(app.methodNotAllowedResponse)
 
 	//register the relevant methods, URL patterns and handler functions for our
 	//endpoints using the HandlerFunc() method.

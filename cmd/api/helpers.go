@@ -8,6 +8,8 @@ import (
 	"strconv"
 )
 
+type envelope map[string]interface{}
+
 func (app *application) readIDParam(request *http.Request) (int64, error) {
 
 	params := httprouter.ParamsFromContext(request.Context())
@@ -20,7 +22,7 @@ func (app *application) readIDParam(request *http.Request) (int64, error) {
 	return id, nil
 }
 
-func (app *application) writeJson(writer http.ResponseWriter, status int, data interface{}, headers http.Header) error {
+func (app *application) writeJson(writer http.ResponseWriter, status int, data envelope, headers http.Header) error {
 	//Encode the data to JSON, returning the error if there was one
 	js, err := json.Marshal(data)
 	if err != nil {
