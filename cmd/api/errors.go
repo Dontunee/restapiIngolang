@@ -18,11 +18,15 @@ func (app *application) errorResponse(writer http.ResponseWriter, request *http.
 
 	// write the response using the writeJSON() helper. if this happens to return an error log it
 	//and fall back to sending the client an empty response with 500 internal server error status code
-	err := app.writeJson(writer, status, env, nil)
+	err := app.writeJSON(writer, status, env, nil)
 	if err != nil {
 		app.logError(request, err)
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func (app *application) badRequestResponse(writer http.ResponseWriter, request *http.Request, err error) {
+	app.errorResponse(writer, request, http.StatusBadRequest, err)
 }
 
 //The serverErrorResponse() method wil be used when our application encounters an unexpected problem at runtime.

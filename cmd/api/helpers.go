@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/julienschmidt/httprouter"
+	"io"
 	"net/http"
 	"strconv"
 )
@@ -22,7 +24,74 @@ func (app *application) readIDParam(request *http.Request) (int64, error) {
 	return id, nil
 }
 
-func (app *application) writeJson(writer http.ResponseWriter, status int, data envelope, headers http.Header) error {
+//The readJSON() provides a reusable method to read json and handler errors centrally
+func (app *application) readJSON(writer http.ResponseWriter, request *http.Request, destination interface{}) error {
+
+	//use the http.MaxBytesReader to limit the size of the request body to 1MB
+	maxBytes := 1_048_576
+	request.Body = http.MaxBytesReader(writer, request.Body, int64(maxBytes))
+
+	//initialize the json.Decoder, and  call the DisallowUnknownFields() method on it before decoding.
+	//This means that if the JSON from the client now includes any field which cannot be mapped to the
+	//target destination , the decoder will return an error instead of just ignoring the field
+	decoder := json.NewDecoder(request.Body)
+	decoder.DisallowUnknownFields()
+
+	//Decode the request body into the target destination
+	err := decoder.Decode(destination)
+	if err == nil {
+		return nil
+	}
+
+	//if there is an error during decoding ,start the triage...
+	var syntaxError *json.SyntaxError
+	var unmarshalTypeError *json.UnmarshalTypeError
+	var invalidUnmarshalError *json.InvalidUnmarshalError
+
+	switch {
+	//use the errors.As() function to check whether the error has the type
+	//*json.SyntaxError. If it does, then return a plain-english error message
+	//which includes the location of the problem
+	case errors.As(err, &syntaxError):
+		return fmt.Errorf("body contains badly-formed JSON (at charcater %d)", syntaxError.Offset)
+
+	//In some circumstances Decode() may also return an io.ErrUnexpectedEOF error
+	//for syntax errors in the JSON. so we check for this using errors.IS()  and
+	//return a generic error message.
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return errors.New("body contains badly-formed JSON")
+
+	//catch any *json.UnmarshalTypeError errors. These occur when the
+	//JSON value is the wrong type for the target destination. if the error relates
+	// to a specific field , then we include that in our error message to make it
+	//easier for the client to debug
+	case errors.As(err, &unmarshalTypeError):
+		if unmarshalTypeError.Field != "" {
+			return fmt.Errorf("body contains incorrect JSON type for field %q", unmarshalTypeError.Field)
+		}
+		return fmt.Errorf("body contains incorrect JSON type (at character %d)", unmarshalTypeError.Offset)
+
+	//An io.EOF error will be returned by Decode() if the request body is empty. we
+	//check for this with errors.Is() and return a plain-english error message
+	//instead
+	case errors.Is(err, io.EOF):
+		return errors.New("body must not be empty")
+
+	//A json.InvalidUnmarshalError error will be returned if we pass a non-nil
+	//pointer to Decode().We catch this and panic , rather than returning an error
+	//to our handler. At the end of this chapter we will talk about panicking versus returning
+	// errors, and discuss why it is an appropriate thing to do in this specific situation
+	case errors.As(err, &invalidUnmarshalError):
+		panic(err)
+
+	default:
+		return err
+	}
+
+}
+
+//The writeJSON() method is to encode object as json to write as response, set header and response code
+func (app *application) writeJSON(writer http.ResponseWriter, status int, data envelope, headers http.Header) error {
 	//Encode the data to JSON, returning the error if there was one
 	js, err := json.Marshal(data)
 	if err != nil {
