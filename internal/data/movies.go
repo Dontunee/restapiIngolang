@@ -1,9 +1,31 @@
 package data
 
 import (
+	"database/sql"
+	"errors"
 	"greenlight.alexedwards.net/internal/validator"
 	"time"
 )
+
+// ErrRecordNotFound Define a custom ErrRecordNotFound. We'll return this from our Get() method when
+//looking aup a movie that doesnt exist in our database
+var (
+	ErrRecordNotFound = errors.New("record not found")
+)
+
+
+
+// MovieModel Defines a MovieModel struct type which wraps a swl.DB connection pool
+type MovieModel struct {
+	DB *sql.DB
+}
+
+// Models Create a Models struct which wraps the MovieModel. We will add models to this,
+//like a UserModel and PermissionModel, as our build continues
+type Models struct {
+	Movies MovieModel
+}
+
 
 type Movie struct {
 	ID        int64     `json:"id"`                    //unique integer for the movie
@@ -35,4 +57,33 @@ func ValidateMovie(v *validator.Validator, movie *Movie) {
 
 	//use the unique helper in the validator to check that all values in the input.Genres are unique
 	v.Check(validator.Unique(movie.Genres), "genres", "must not contain duplicate values")
+}
+
+
+
+// Insert Placeholder method for inserting a new record in the movies table
+func (movieModel MovieModel) Insert (movie *Movie) error{
+	return nil
+}
+
+// Get Placeholder method for fetching a specific record from the movies table
+func (movieModel *MovieModel) Get(id int64) (*Movie, error){
+	return nil, nil
+}
+
+//Update Placeholder method for updating a specific record in the movies table
+func (movieModel MovieModel) Update (movie *Movie) error{
+	return nil
+}
+
+//Delete Placeholder method for deleting a specific record from the movies table
+func (movieModel *MovieModel) Delete(id int64) error {
+	return nil
+}
+
+// NewModels A New() method which returns a models struct containing initialized MovieModel.
+func NewModels( db *sql.DB) Models {
+	return Models{
+		Movies: MovieModel{DB: db},
+	}
 }
