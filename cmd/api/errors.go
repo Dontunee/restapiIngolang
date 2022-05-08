@@ -55,3 +55,9 @@ func (app *application) methodNotAllowedResponse(writer http.ResponseWriter, req
 func (app *application) failedValidationResponse(writer http.ResponseWriter, request *http.Request, errors map[string]string) {
 	app.errorResponse(writer, request, http.StatusUnprocessableEntity, errors)
 }
+
+
+func (app *application) editConflictResponse( writer http.ResponseWriter, request *http.Request){
+	message := "unable to update the record due to an edit conflict, please try again"
+	app.errorResponse(writer,request,http.StatusConflict,message)
+}

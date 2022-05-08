@@ -3,6 +3,7 @@ package data
 import (
 	"database/sql"
 	"errors"
+	"github.com/lib/pq"
 	"greenlight.alexedwards.net/internal/validator"
 	"time"
 )
@@ -11,6 +12,7 @@ import (
 //looking aup a movie that doesnt exist in our database
 var (
 	ErrRecordNotFound = errors.New("record not found")
+	ErrEditConflict = errors.New("edit conflict")
 )
 
 
@@ -62,22 +64,112 @@ func ValidateMovie(v *validator.Validator, movie *Movie) {
 
 
 // Insert Placeholder method for inserting a new record in the movies table
+// accepts a pointer to a movie struct, which should contain the data for the
+// new record
 func (movieModel MovieModel) Insert (movie *Movie) error{
-	return nil
+	//Define the SQL query for inserting a new record in the movies
+	//table and returning the system-generated data.
+	query := `INSERT INTO movies (title,year, runtime ,genres)
+	         VALUES ($1,$2,$3,$4)
+	         RETURNING id, created_at, version`
+
+	//Create an args slice containing the values for the placeholder parameters from
+	//the movie struct. Declaring the slice immediately next to our SQL query makes it
+	//readable and clear its usage
+	args := []interface{}{movie.Title, movie.Year, movie.RunTime, pq.Array(movie.Genres)}
+
+	//Use the QueryRow() method to execute the query on our connection pool
+	//passing in the args slice as a variadic parameter and scanning the system-generated
+	//id, created_at amd version values into the movie struct
+	return movieModel.DB.QueryRow(query,args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
 }
 
 // Get Placeholder method for fetching a specific record from the movies table
 func (movieModel *MovieModel) Get(id int64) (*Movie, error){
-	return nil, nil
+
+	//PostgreSQL bigserial type starts auto incrementing at 1 by default, therefore no movies will ID values
+	//less than that, its best avoid unnecessary database call and return an error
+	if id < 1{
+		return nil,ErrRecordNotFound
+	}
+
+	//Define the SQL query for retrieving the movie data
+	query := `SELECT id,created_at,title,year,runtime,genres,version FROM movies WHERE id = $1`
+
+	//Declare a Movie struct to hold the data returned by the query
+	var movie Movie
+
+	//Execute the query using the QueryRow() method, passing in the provided id value as a placeholder parameter
+	//and scan the response data into the fields of the Movie struct. Importantly, it is require dto scan target
+	//for the genres column using the pq.Array() adapter function again.
+	err := movieModel.DB.QueryRow(query,id).Scan(
+		&movie.ID,
+		&movie.CreatedAt,
+		&movie.Title,
+		&movie.Year,
+		&movie.RunTime,
+		pq.Array(&movie.Genres),
+		&movie.Version,
+		)
+
+	if err != nil {
+		if errors.Is(err,sql.ErrNoRows){
+			return nil,ErrRecordNotFound
+		}else {
+			return nil,err
+		}
+	}
+
+	//otherwise return pointer to the movie struct
+	return &movie, nil
 }
 
 //Update Placeholder method for updating a specific record in the movies table
 func (movieModel MovieModel) Update (movie *Movie) error{
-	return nil
+	//Declare the SQL query for updating the record and returning the new version number
+	//Use version to apply an optimistic solution for data race condition
+	query := `UPDATE movies SET title=$1, year= $2 , runtime = $3, genres = $4, version = version + 1
+			  WHERE id = $5 and version = $6
+	          RETURNING version`
+
+	//Create an args slice containing the values for the placeholder parameters
+	args := []interface{}{movie.Title, movie.Year, movie.RunTime,pq.Array(movie.Genres),movie.ID,movie.Version}
+
+	//Use the QueryROW() method to execute the query, passing in the args slice as a variadic parameter
+	//and scanning the new version value into the movie struct
+	return movieModel.DB.QueryRow(query,args...).Scan(&movie.Version)
 }
 
 //Delete Placeholder method for deleting a specific record from the movies table
 func (movieModel *MovieModel) Delete(id int64) error {
+	// return a ErrRecordNotFound error if the movie ID is less than 1
+	if id < 1 {
+		return ErrRecordNotFound
+	}
+
+	//construct the SQL query to delete the record
+	query := `DELETE FROM movies WHERE id = $1`
+
+	//Execute the SQL query using the Exec() method, passing in the id variable as the value
+	//for the placeholder parameter. The Exec()  method returns a sql.Result object
+	result , err := movieModel.DB.Exec(query,id)
+	if err != nil {
+		return err
+	}
+
+	//Call the RowsAffected() method on the sql.Result object to get the number of rows affected by the query
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	//if no rows were affected, we know that the movies didnt contain a record
+	//with the provided ID at the moment we tried to delete it.in that case we
+	//return an ErrRecordNotFound error.
+	if rowsAffected == 0 {
+		return  ErrRecordNotFound
+	}
+
 	return nil
 }
 

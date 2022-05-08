@@ -46,7 +46,7 @@ func main() {
 
 	//read the value of port and env command-line flags into the cfg struct ,set the default for each flag
 	//if not specified
-	flag.IntVar(&cfg.port, "port", 4000, "API server port")
+	flag.IntVar(&cfg.port, "port", 8000, "API server port")
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connection")
 	flag.IntVar(&cfg.db.maxIdleConns,"db-max-idle-conns", 25, "PostgreSQL max idle connections")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")

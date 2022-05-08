@@ -25,6 +25,9 @@ func (app *application) routes() *httprouter.Router {
 	router.HandlerFunc("GET", "/v1/healthcheck", app.healthCheckHandler)
 	router.HandlerFunc("POST", "/v1/movies", app.createMovieHandler)
 	router.HandlerFunc("GET", "/v1/movies/:id", app.showMovieHandler)
+	router.HandlerFunc("PATCH", "/v1/movies/:id", app.updateMovieHandler)
+	router.HandlerFunc("DELETE", "/v1/movies/:id",app.deleteMovieHandler)
+
 
 	//return the http router instance
 	return router
