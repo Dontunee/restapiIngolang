@@ -9,6 +9,7 @@ import (
 	"strconv"
 )
 
+//add a listMoviesHandler for the GET "v1/movies" endpoint.
 func (app *application) listMoviesHandler(writer http.ResponseWriter, request *http.Request){
 	//To keep things consistent with our other handlers, we will define an input struct
 	//to hold the expected values from the query string

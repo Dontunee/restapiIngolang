@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/lib/pq"
 	"greenlight.alexedwards.net/internal/validator"
 	"time"
@@ -62,14 +63,16 @@ func ValidateMovie(v *validator.Validator, movie *Movie) {
 	v.Check(validator.Unique(movie.Genres), "genres", "must not contain duplicate values")
 }
 
-
-
-//Create a new GetAll() method which returns a slice of movies. Although we are not
+// GetAll Create a new GetAll() method which returns a slice of movies. Although we are not
 //using them right now, we have set this up to accept the various filter parameters as
 // arguments
 func (movieModel MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, error){
 	//Construct the SQL query to retrieve all movie records
-	query := `SELECT id, created_at, title, year, runtime, genres, version FROM movies ORDER BY id`
+	query := fmt.Sprintf(`SELECT id, created_at, title, year, runtime, genres, version 
+				FROM movies 
+				WHERE (to_tsvector('simple',title)  @@ plainto_tsquery('simple',$1) OR $1 = '')
+				AND (genres @> $2 OR $2 = '{}')
+				ORDER BY %s %s, id ASC`,filters.sortColumn(),filters.sortDirection())
 
 	//Create a context with a 3-second timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -77,7 +80,7 @@ func (movieModel MovieModel) GetAll(title string, genres []string, filters Filte
 
 	//Use QueryContext() to execute the query. This returns a sql.Rows result set
 	//containing the result
-	rows,err := movieModel.DB.QueryContext(ctx,query)
+	rows,err := movieModel.DB.QueryContext(ctx,query,title,pq.Array(genres))
 	if err != nil {
 		return nil,err
 	}
@@ -86,7 +89,7 @@ func (movieModel MovieModel) GetAll(title string, genres []string, filters Filte
 	defer rows.Close()
 
 	//initialize an empty slice to hold the movie data
-	var movies []*Movie
+	movies := []*Movie{}
 
 	//Use rows.Next() to iterate through the rows in the result set
 	for rows.Next() {
