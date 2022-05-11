@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"github.com/lib/pq"
@@ -63,6 +64,65 @@ func ValidateMovie(v *validator.Validator, movie *Movie) {
 
 
 
+//Create a new GetAll() method which returns a slice of movies. Although we are not
+//using them right now, we have set this up to accept the various filter parameters as
+// arguments
+func (movieModel MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, error){
+	//Construct the SQL query to retrieve all movie records
+	query := `SELECT id, created_at, title, year, runtime, genres, version FROM movies ORDER BY id`
+
+	//Create a context with a 3-second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	//Use QueryContext() to execute the query. This returns a sql.Rows result set
+	//containing the result
+	rows,err := movieModel.DB.QueryContext(ctx,query)
+	if err != nil {
+		return nil,err
+	}
+
+	//importantly , defer a call to rows.Close() to ensure that the result set is cosed before GetAll() returns
+	defer rows.Close()
+
+	//initialize an empty slice to hold the movie data
+	var movies []*Movie
+
+	//Use rows.Next() to iterate through the rows in the result set
+	for rows.Next() {
+		//initialize an empty Movie struct to hold the data for an individual movie
+		var movie Movie
+
+		//scan the values from the row into the movie struct. Again, note that we are
+		//using the pq.Array() adapter on the genres field here.
+		err := rows.Scan(
+			&movie.ID,
+			&movie.CreatedAt,
+			&movie.Title,
+			&movie.Year,
+			&movie.RunTime,
+			pq.Array(&movie.Genres),
+			&movie.Version,
+			)
+
+		if err != nil {
+			return nil,err
+		}
+
+		//Add the Movie struct to the slice
+		movies = append(movies,&movie)
+	}
+
+	//when the rows.Next() loop has finished, call rows.Err() to retrieve any error
+	//that was encountered during the iteration
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	//if everything went ok , then return the slice of movies
+	return movies,nil
+}
+
 // Insert Placeholder method for inserting a new record in the movies table
 // accepts a pointer to a movie struct, which should contain the data for the
 // new record
@@ -78,10 +138,13 @@ func (movieModel MovieModel) Insert (movie *Movie) error{
 	//readable and clear its usage
 	args := []interface{}{movie.Title, movie.Year, movie.RunTime, pq.Array(movie.Genres)}
 
+	ctx , cancel := context.WithTimeout(context.Background(),3*time.Second)
+	defer  cancel()
+
 	//Use the QueryRow() method to execute the query on our connection pool
 	//passing in the args slice as a variadic parameter and scanning the system-generated
 	//id, created_at amd version values into the movie struct
-	return movieModel.DB.QueryRow(query,args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+	return movieModel.DB.QueryRowContext(ctx, query,args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
 }
 
 // Get Placeholder method for fetching a specific record from the movies table
@@ -99,10 +162,18 @@ func (movieModel *MovieModel) Get(id int64) (*Movie, error){
 	//Declare a Movie struct to hold the data returned by the query
 	var movie Movie
 
+	//use the context.WithTimeout() function to create a context.context which carries
+	//a 3second deadline. Note that we are using the empty context.Background as the
+	//parent context
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+	//defer to make sure to cancel the context before the Get() method returns
+	defer cancel()
+
 	//Execute the query using the QueryRow() method, passing in the provided id value as a placeholder parameter
 	//and scan the response data into the fields of the Movie struct. Importantly, it is require dto scan target
 	//for the genres column using the pq.Array() adapter function again.
-	err := movieModel.DB.QueryRow(query,id).Scan(
+	err := movieModel.DB.QueryRowContext(ctx, query,id).Scan(
 		&movie.ID,
 		&movie.CreatedAt,
 		&movie.Title,
@@ -135,9 +206,11 @@ func (movieModel MovieModel) Update (movie *Movie) error{
 	//Create an args slice containing the values for the placeholder parameters
 	args := []interface{}{movie.Title, movie.Year, movie.RunTime,pq.Array(movie.Genres),movie.ID,movie.Version}
 
+	ctx , cancel := context.WithTimeout(context.Background(),3*time.Second)
+	defer  cancel()
 	//Use the QueryROW() method to execute the query, passing in the args slice as a variadic parameter
 	//and scanning the new version value into the movie struct
-	return movieModel.DB.QueryRow(query,args...).Scan(&movie.Version)
+	return movieModel.DB.QueryRowContext(ctx,query,args...).Scan(&movie.Version)
 }
 
 //Delete Placeholder method for deleting a specific record from the movies table
@@ -150,9 +223,11 @@ func (movieModel *MovieModel) Delete(id int64) error {
 	//construct the SQL query to delete the record
 	query := `DELETE FROM movies WHERE id = $1`
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 	//Execute the SQL query using the Exec() method, passing in the id variable as the value
 	//for the placeholder parameter. The Exec()  method returns a sql.Result object
-	result , err := movieModel.DB.Exec(query,id)
+	result , err := movieModel.DB.ExecContext(ctx,query,id)
 	if err != nil {
 		return err
 	}

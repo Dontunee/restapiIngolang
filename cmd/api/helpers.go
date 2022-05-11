@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/julienschmidt/httprouter"
+	"greenlight.alexedwards.net/internal/validator"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 )
 
 type envelope map[string]interface{}
@@ -113,3 +116,64 @@ func (app *application) writeJSON(writer http.ResponseWriter, status int, data e
 
 	return nil
 }
+
+
+//The readString() helper returns a string value from the query string, or the provided
+//default value if no matching key could be found
+func (app *application) readString(queryValues url.Values, key string, defaultValue string) string {
+	//Extract the value for a give key from the query string. if empty it returns an empty string
+	value := queryValues.Get(key)
+
+	//if no key exists (or the value is empty) then return the default value
+	if value == ""{
+		return defaultValue
+	}
+
+	//Otherwise return the string
+	return value
+}
+
+
+//The readCSV() helper reads a string value from the query string and then splits it
+//into a slice on the comma character. if no matching key could not be found, it returns
+//the provided default value
+func (app *application) readCSV(queryValues url.Values, key string, defaultValue []string) []string {
+	//extract the value from the query string
+	csv := queryValues.Get(key)
+
+	//if no key exists (or the value is empty) then return the default value
+	if csv == "" {
+		return  defaultValue
+	}
+
+	//otherwise parse the value into a []string slice and then return it
+	return strings.Split(csv, ",")
+}
+
+
+//The readInt() helper reads a string value from the query string and converts it to an
+//integer before returning. if no matching key could be found it returns the provided
+//default value. if the value could not be converted to an integer, then we record an
+//error message in the provided validator instance
+func (app *application) readInt(queryValues url.Values, key string, defaultValue int, validate *validator.Validator) int {
+	//Extract the value from the query string
+	value := queryValues.Get(key)
+
+	//if no key exists (or the value is empty) then return the default value
+	if value == ""{
+		return defaultValue
+	}
+
+	//try to convert the value to an int. adds an error message to the validator
+	//instance and return the default value
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		validate.AddError(key, "must be an integer value")
+		return defaultValue
+	}
+
+	//otherwise return the converted integer value
+	return  i
+}
+
+

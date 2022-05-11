@@ -22,6 +22,7 @@ func (app *application) routes() *httprouter.Router {
 
 	//register the relevant methods, URL patterns and handler functions for our
 	//endpoints using the HandlerFunc() method.
+	router.HandlerFunc("GET", "/v1/movies",app.listMoviesHandler)
 	router.HandlerFunc("GET", "/v1/healthcheck", app.healthCheckHandler)
 	router.HandlerFunc("POST", "/v1/movies", app.createMovieHandler)
 	router.HandlerFunc("GET", "/v1/movies/:id", app.showMovieHandler)

@@ -9,6 +9,68 @@ import (
 	"strconv"
 )
 
+func (app *application) listMoviesHandler(writer http.ResponseWriter, request *http.Request){
+	//To keep things consistent with our other handlers, we will define an input struct
+	//to hold the expected values from the query string
+
+	var input struct {
+		Title string
+		Genres []string
+		data.Filters
+	}
+
+	//initialize  a new validator instance
+	validate := validator.New()
+
+	//call method to get the url.Values map containing the query string data
+	queryValues := request.URL.Query()
+
+	//Use our helpers to extract the title and genres query string values, falling back
+	// to defaults of an empty string and empty slice respectively if they are not
+	//provided by the client
+	input.Title = app.readString(queryValues,"title", "")
+	input.Genres = app.readCSV(queryValues, "genres", []string{})
+
+	//Get the page and page_size query string values as integers. Notice that we
+	//set the default page to 1 and default page_size to 20, and that we pass
+	// the validator instance as the final argument here
+	input.Filters.Page = app.readInt(queryValues, "page", 1, validate)
+	input.Filters.PageSize = app.readInt(queryValues, "page_size", 20, validate)
+
+	//Extract the sort query string value, falling back to "id" if it is not provided
+	//by the client (which will imply a ascending sort on movie ID).
+	input.Sort = app.readString(queryValues, "sort", "id")
+
+	//Add the supported sort values for this endpoint to the sort safe list
+	input.Filters.SortSafeList = []string{"id", "title", "year", "runtime", "-id", "-title", "-year", "-runtime"}
+
+	//Execute the validation checks on the filters struct and send a response
+	//containing the errors if necessary
+	if data.ValidateFilters(validate, input.Filters); !validate.Valid(){
+		app.failedValidationResponse(writer,request,validate.Errors)
+		return
+	}
+
+	//Check the Validator instance for any errors and use the failedValidationResponse()
+	//helper to send the client a response if necessary
+	if !validate.Valid() {
+		app.failedValidationResponse(writer,request,validate.Errors)
+		return
+	}
+
+	movies, err := app.models.Movies.GetAll(input.Title, input.Genres, input.Filters)
+	if err != nil {
+		app.serverErrorResponse(writer, request,err)
+		return
+	}
+
+	//send a JSON response containing the movie data
+	err = app.writeJSON(writer,http.StatusOK, envelope{"movies":movies}, nil)
+	if err != nil {
+		app.serverErrorResponse(writer,request,err)
+	}
+}
+
 //add a createMovieHandler for the POST "v1/movies" endpoint.
 func (app *application) createMovieHandler(writer http.ResponseWriter, request *http.Request) {
 	//anonymous struct to hold information expected in request
